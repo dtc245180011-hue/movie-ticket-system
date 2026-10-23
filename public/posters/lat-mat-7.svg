@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#c28a45"/>
+    <stop offset="100%" stop-color="#171d28"/>
+  </linearGradient>
+  <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#00000000"/>
+    <stop offset="100%" stop-color="#05050bee"/>
+  </linearGradient>
+</defs>
+<rect width="400" height="600" fill="url(#bg)"/>
+<circle cx="205" cy="225" r="145" fill="#ffffff" opacity=".06"/>
+<circle cx="205" cy="225" r="105" fill="none" stroke="#ffffff" stroke-opacity=".18" stroke-width="2"/>
+<path d="M0 420 Q100 340 200 420 T400 400 V600 H0Z" fill="#05050b" opacity=".48"/>
+<text x="200" y="285" text-anchor="middle" font-family="sans-serif"
+      font-size="180" font-weight="900" fill="#ffffff" fill-opacity=".88">7</text>
+<rect width="400" height="600" fill="url(#shade)"/>
+<text x="200" y="485" text-anchor="middle" font-family="sans-serif"
+      font-size="38" font-weight="900" letter-spacing="2" fill="#ffffff">LAT MAT 7</text>
+<text x="200" y="523" text-anchor="middle" font-family="sans-serif"
+      font-size="15" letter-spacing="3" fill="#f5c56b">MOT DIEU UOC</text>
+<path d="M80 548 H320" stroke="#f04452" stroke-width="3"/>
+<text x="200" y="575" text-anchor="middle" font-family="sans-serif"
+      font-size="10" letter-spacing="4" fill="#ffffff" opacity=".7">CINEMA EXPERIENCE</text>
+</svg>

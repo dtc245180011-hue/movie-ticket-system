@@ -1,0 +1,20 @@
+local.file_match "movie_app_logs" {
+  path_targets = [
+    {
+      __path__ = "/home/diepdinhhan/movie-ticket-system/monitoring/logs/*.log",
+      job      = "movie-ticket-app",
+      host     = "ubuntu",
+    },
+  ]
+}
+
+loki.source.file "movie_app_logs" {
+  targets    = local.file_match.movie_app_logs.targets
+  forward_to = [loki.write.local_loki.receiver]
+}
+
+loki.write "local_loki" {
+  endpoint {
+    url = "http://127.0.0.1:3100/loki/api/v1/push"
+  }
+}

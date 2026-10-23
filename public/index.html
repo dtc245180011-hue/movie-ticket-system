@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cinema Ticket System</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#0f172a;
+    color:white;
+}
+header{
+    background:#1e293b;
+    padding:20px;
+    text-align:center;
+}
+header h1{
+    color:#fbbf24;
+    margin:0;
+}
+main{
+    max-width:1100px;
+    margin:30px auto;
+    padding:20px;
+}
+.movies{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+    gap:20px;
+}
+.card{
+    background:#1e293b;
+    border-radius:15px;
+    padding:20px;
+    border:1px solid #334155;
+}
+.poster{
+    height:150px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:60px;
+    background:#334155;
+    border-radius:10px;
+    margin-bottom:15px;
+}
+.card h3{
+    color:#fbbf24;
+}
+.card p{
+    color:#cbd5e1;
+}
+button{
+    width:100%;
+    padding:12px;
+    border:none;
+    border-radius:8px;
+    background:#f59e0b;
+    font-weight:bold;
+    cursor:pointer;
+}
+button:hover{
+    background:#fbbf24;
+}
+#message{
+    display:none;
+    margin-top:25px;
+    padding:18px;
+    background:#166534;
+    border-radius:8px;
+}
+</style>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+
+<header>
+<h1>🎬 CINEMA TICKET SYSTEM</h1>
+<p>Hệ thống đặt vé xem phim</p>
+</header>
+
+<main>
+
+<h2>Danh sách phim</h2>
+
+<div id="movies" class="movies">
+    <p>Đang tải dữ liệu...</p>
+</div>
+
+<div id="message"></div>
+
+</main>
+
+<script>
+
+function getPoster(title) {
+    const t = title.toLowerCase();
+    let src = "/posters/mai.svg";
+
+    if (t.includes("lat")) {
+        src = "/posters/lat-mat-7.svg";
+    } else if (t.includes("avengers")) {
+        src = "/posters/avengers.svg";
+    }
+
+    return `<img class="poster-image" src="${src}" alt="Poster phim ${title}">`;
+}
+
+async function chooseMovie(title) {
+    const msg = document.getElementById("message");
+    msg.style.display = "block";
+    msg.textContent = "Đang tải lịch chiếu...";
+    msg.scrollIntoView({ behavior: "smooth" });
+
+    try {
+        const moviesRes = await fetch("/api/movies");
+        if (!moviesRes.ok) throw new Error("Không tải được danh sách phim");
+        const movies = await moviesRes.json();
+        const movie = movies.find(m => m.title === title);
+        if (!movie) throw new Error("Không tìm thấy phim");
+
+        const showRes = await fetch("/api/showtimes/" + movie.id);
+        if (!showRes.ok) throw new Error("Không tải được lịch chiếu");
+        const showtimes = await showRes.json();
+
+        if (!showtimes.length) {
+            msg.textContent = "Phim này chưa có lịch chiếu.";
+            return;
+        }
+
+        msg.innerHTML = `
+            <section class="booking-panel">
+                <h2>Đặt vé: ${movie.title}</h2>
+                <label for="showtimeSelect">Chọn suất chiếu:</label>
+                <select id="showtimeSelect">
+                    ${showtimes.map(st => `
+                        <option value="${st.id}" data-price="${Number(st.ticket_price)}">
+                            ${String(st.show_date).substring(0,10)}
+                            — ${st.show_time}
+                            — ${Number(st.ticket_price).toLocaleString("vi-VN")} VNĐ
+                        </option>
+                    `).join("")}
+                </select>
+
+                <h3>Sơ đồ ghế</h3>
+                <p>Màn hình</p>
+                <div id="seatMap">Đang tải ghế...</div>
+                <p id="seatInfo">Chọn một ghế còn trống.</p>
+
+                <form id="bookingForm">
+                    <h3>Thông tin khách hàng</h3>
+                    <label for="customerName">Họ và tên:</label><br>
+                    <input id="customerName" name="customer_name"
+                           maxlength="100" required autocomplete="name"><br><br>
+
+                    <label for="customerEmail">Email (không bắt buộc):</label><br>
+                    <input id="customerEmail" name="customer_email"
+                           type="email" maxlength="150" autocomplete="email"><br><br>
+
+                    <p id="totalPrice">Giá vé: —</p>
+                    <button id="confirmBooking" type="submit" disabled>
+                        Xác nhận đặt vé
+                    </button>
+                    <button id="payBooking" type="button" hidden>
+                        Thanh toán giả lập
+                    </button>
+                    <p id="bookingResult" role="status"></p>
+                </form>
+            </section>
+        `;
+
+        const select = document.getElementById("showtimeSelect");
+        const seatMap = document.getElementById("seatMap");
+        const seatInfo = document.getElementById("seatInfo");
+        const form = document.getElementById("bookingForm");
+        const confirmButton = document.getElementById("confirmBooking");
+        const payButton = document.getElementById("payBooking");
+        const result = document.getElementById("bookingResult");
+        const totalPrice = document.getElementById("totalPrice");
+
+        let selectedSeat = null;
+        let selectedSeatButton = null;
+        let submitting = false;
+        let pendingBookingCode = null;
+
+        function clearSelection() {
+            selectedSeat = null;
+            selectedSeatButton = null;
+            confirmButton.disabled = true;
+            totalPrice.textContent = "Giá vé: —";
+            seatInfo.textContent = "Chọn một ghế còn trống.";
+        }
+
+        payButton.addEventListener("click", async () => {
+            if (submitting || !pendingBookingCode) return;
+
+            submitting = true;
+            payButton.disabled = true;
+            result.textContent = "Đang xử lý thanh toán giả lập...";
+
+            try {
+                const response = await fetch(
+                    "/api/bookings/" +
+                    encodeURIComponent(pendingBookingCode) + "/pay",
+                    { method: "POST" }
+                );
+                const data = await response.json();
+
+                if (!response.ok) {
+                    result.textContent = data.error ||
+                        "Thanh toán không thành công.";
+                    payButton.disabled = false;
+                    return;
+                }
+
+                result.textContent = "THANH TOÁN THÀNH CÔNG! Mã vé: " +
+                    data.booking_code + ". Trạng thái: ĐÃ XÁC NHẬN.";
+
+                pendingBookingCode = null;
+                payButton.hidden = true;
+                payButton.disabled = false;
+                confirmButton.hidden = false;
+                form.reset();
+                await loadSeats();
+            } catch (error) {
+                result.textContent =
+                    "Không nhận được phản hồi thanh toán. Hãy kiểm tra trạng thái vé trước khi thử lại.";
+                payButton.disabled = false;
+            } finally {
+                submitting = false;
+                confirmButton.disabled = !selectedSeat;
+            }
+        });
+
+        select.addEventListener("change", async () => {
+            result.textContent = "";
+            await loadSeats();
+        });
+
+        async function loadSeats() {
+            clearSelection();
+            seatMap.textContent = "Đang tải ghế...";
+            seatMap.style.display = "grid";
+            seatMap.style.gridTemplateColumns = "repeat(12, minmax(0, 1fr))";
+            seatMap.style.gap = "8px";
+            seatMap.style.maxWidth = "760px";
+
+            try {
+                const seatRes = await fetch(
+                    "/api/showtimes/" + encodeURIComponent(select.value) + "/seats"
+                );
+                if (!seatRes.ok) throw new Error("Không tải được ghế");
+
+                const seats = await seatRes.json();
+                seatMap.innerHTML = "";
+
+                seats.forEach(seat => {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.textContent = seat.seat_number +
+                        (seat.seat_type === "VIP" ? " ★" : "");
+                    button.style.padding = "12px 4px";
+                    button.style.borderRadius = "8px";
+                    button.style.border = "1px solid #b99a52";
+                    button.style.cursor = seat.status === "available"
+                        ? "pointer" : "not-allowed";
+                    button.style.background = seat.status === "booked" ? "#777" :
+                        (seat.seat_type === "VIP" ? "#b99a52" : "#e8e8e8");
+                    button.style.color = seat.status === "booked" ? "#fff" : "#222";
+                    button.disabled = seat.status !== "available";
+                    button.title = seat.status === "booked" ? "Đã đặt" :
+                        (seat.seat_type === "VIP" ? "Ghế VIP còn trống" : "Ghế thường còn trống");
+
+                    button.addEventListener("click", () => {
+                        if (seat.status !== "available") return;
+
+                        if (selectedSeatButton) {
+                            selectedSeatButton.style.outline = "";
+                        }
+
+                        selectedSeat = seat;
+                        selectedSeatButton = button;
+                        button.style.outline = "3px solid #1769aa";
+                        seatInfo.textContent = "Đã chọn ghế " + seat.seat_number +
+                            " (" + (seat.seat_type === "VIP" ? "VIP" : "Standard") + ").";
+                        const price = Number(
+                            select.options[select.selectedIndex].dataset.price
+                        );
+                        totalPrice.textContent = "Giá vé: " +
+                            price.toLocaleString("vi-VN") + " VNĐ";
+                        confirmButton.disabled = false;
+                        result.textContent = "";
+                    });
+
+                    seatMap.appendChild(button);
+                });
+
+                seatInfo.textContent =
+                    "Ghế xám: đã đặt. Ghế sáng: còn trống. ★: ghế VIP.";
+            } catch (error) {
+                seatMap.textContent = "Không thể tải sơ đồ ghế. Vui lòng thử lại.";
+            }
+        }
+
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            if (submitting) return;
+
+            if (!selectedSeat) {
+                result.textContent = "Vui lòng chọn ghế trước khi xác nhận.";
+                return;
+            }
+
+            const customerName = document.getElementById("customerName").value.trim();
+            const customerEmail = document.getElementById("customerEmail").value.trim();
+
+            if (!customerName) {
+                result.textContent = "Vui lòng nhập họ tên.";
+                return;
+            }
+
+            submitting = true;
+            confirmButton.disabled = true;
+            result.textContent = "Đang xử lý đặt vé...";
+
+            try {
+                const response = await fetch("/api/bookings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        customer_name: customerName,
+                        customer_email: customerEmail,
+                        showtime_id: Number(select.value),
+                        seat_id: Number(selectedSeat.id)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    result.textContent = data.error || "Đặt vé không thành công.";
+                    await loadSeats();
+                    return;
+                }
+
+                pendingBookingCode = data.booking_code;
+                confirmButton.hidden = true;
+                payButton.hidden = false;
+                payButton.disabled = false;
+                result.textContent = "ĐÃ GIỮ GHẾ — CHƯA THANH TOÁN. Mã đặt vé: " +
+                    data.booking_code + " | Ghế: " + data.seat_number +
+                    " | Giá vé: " +
+                    Number(data.ticket_price).toLocaleString("vi-VN") +
+                    " VNĐ. Nhấn Thanh toán giả lập để hoàn tất."; 
+                form.reset();
+                await loadSeats();
+            } catch (error) {
+                result.textContent =
+                    "Không nhận được phản hồi từ máy chủ. Hãy kiểm tra trạng thái ghế trước khi thử lại.";
+                await loadSeats();
+            } finally {
+                submitting = false;
+                confirmButton.disabled = !selectedSeat;
+            }
+        });
+
+        await loadSeats();
+    } catch (error) {
+        console.error(error);
+        msg.textContent = "Không thể tải thông tin đặt vé. Vui lòng thử lại.";
+    }
+}
+
+async function loadMovies(){
+
+    try{
+
+        const res=await fetch("/api/movies");
+
+        const movies=await res.json();
+
+        const container=document.getElementById("movies");
+
+        container.innerHTML="";
+
+        movies.forEach(movie=>{
+
+            container.innerHTML+=`
+            <div class="card">
+                <div class="poster">${getPoster(movie.title)}</div>
+                <h3>${movie.title}</h3>
+                <p><b>Thể loại:</b> ${movie.genre}</p>
+                <p><b>Thời lượng:</b> ${movie.duration_minutes} phút</p>
+                <p>${movie.description}</p>
+                <button onclick="chooseMovie('${movie.title}')">
+                    Đặt vé
+                </button>
+            </div>
+            `;
+        });
+
+    }catch(err){
+
+        document.getElementById("movies").innerHTML="<p>Không thể tải danh sách phim.</p>";
+    }
+}
+
+
+loadMovies();
+
+</script>
+
+</body>
+</html>
