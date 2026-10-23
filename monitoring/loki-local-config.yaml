@@ -4,6 +4,7 @@ server:
   http_listen_address: 127.0.0.1
   http_listen_port: 3100
   grpc_listen_port: 9096
+  grpc_listen_address: 127.0.0.1
 
 common:
   path_prefix: /home/diepdinhhan/movie-ticket-system/monitoring/loki-data
